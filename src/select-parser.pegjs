@@ -57,6 +57,16 @@
   }
 }
 
+// Select (root level)
+root_select
+  = head:root_attribute tail:(',' root_attribute)* {
+      var obj = head;
+      for (var i = 0; i < tail.length; i++) {
+        obj = mergeSelect(obj, tail[i][1]);
+      }
+      return obj;
+    }
+
 // Select
 select
   = head:attribute tail:(',' attribute)* {
@@ -68,9 +78,29 @@ select
     }
 
 // Attributes
+root_attribute
+  = combined_root_attribute
+  / attr:single_root_attribute
+
 attribute
   = combined_attribute
   / attr:single_attribute
+
+combined_root_attribute
+  = head:single_root_attribute '.' tail:attribute {
+      var obj = head;
+      for (var o in obj) {
+        if (obj[o].select) {
+          // single_attribute was "a[b,c]" => append to all leaves
+          getLeaves(obj).forEach(function (sub) {
+            sub.select = tail;
+          });
+        } else {
+          obj[o].select = tail;
+        }
+      }
+      return obj;
+    }
 
 combined_attribute
   = head:single_attribute '.' tail:attribute {
@@ -85,6 +115,15 @@ combined_attribute
           obj[o].select = tail;
         }
       }
+      return obj;
+    }
+
+single_root_attribute
+  = sub:sub_select
+  / name:root_ident options:options sub:sub_select? {
+      var obj = {};
+      obj[name] = options;
+      if (sub) obj[name].select = sub;
       return obj;
     }
 
@@ -145,6 +184,13 @@ option_value
 option_value_part
   = str:quoted_string
   / chars:[^()"]+ { return chars.join(''); }
+
+root_ident
+  = chars:[A-Za-z0-9_]+ { return chars.join(''); }
+  / chars:[A-Za-z0-9_{}]+ {
+      if (!options.enableDepends) throw new SyntaxError('Invalid curly braces in attribute identifier');
+      return chars.join('');
+    }
 
 ident
   = chars:[A-Za-z0-9_]+ { return chars.join(''); }
